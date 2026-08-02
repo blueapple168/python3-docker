@@ -16,7 +16,7 @@ LABEL org.opencontainers.image.authors="baidongying@cnpc.com.cn" \
       org.opencontainers.image.vendor="Enterprise" \
       os="UnionTechOS Server 20" \
       os.version="${BASE_IMAGE_TAG}" \
-      component="python-runtime"
+      component="python3-runtime"
 
 # 构建阶段
 ENV LANG=C.UTF-8 \
