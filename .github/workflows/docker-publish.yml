@@ -20,6 +20,8 @@ env:
   REGISTRY: ghcr.io
   # github.repository as <account>/<repo>
   IMAGE_NAME: ${{ github.repository }}
+  # 定义目标多架构平台
+  PLATFORMS: linux/amd64,linux/arm64
 
 
 jobs:
@@ -77,6 +79,8 @@ jobs:
         with:
           context: .
           file: ./uos/python3.14/Dockerfile
+          # ========= 新增多架构平台配置 =========
+          platforms: ${{ env.PLATFORMS }}
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
