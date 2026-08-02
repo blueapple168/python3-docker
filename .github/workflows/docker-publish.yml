@@ -11,13 +11,12 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_REPO: blueapple168/uos-python
+  IMAGE_REPO: blueapple/uos-python
   PLATFORMS: linux/amd64,linux/arm64
 
 permissions:
   contents: read
   packages: write
-  id-token: write
 
 jobs:
   discovery:
@@ -25,28 +24,25 @@ jobs:
     outputs:
       matrix: ${{ steps.gen_matrix.outputs.matrix }}
     steps:
-      - name: Checkout repository
+      - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Scan all python version directories under uos/
+      - name: Scan all target directories
         id: scan_dirs
         run: |
-          # 匹配 uos/python3.11、python3.12 格式目录，目录内包含Dockerfile
-          ALL_DIRS=$(find ./uos -maxdepth 1 -type d -name "python3.*" | while read d; do
-            if [ -f "${d}/Dockerfile" ]; then echo "$d"; fi
-          done | sort -u)
-          echo "ALL_DIRS<<EOF" >> $GITHUB_ENV
-          echo "${ALL_DIRS}" >> $GITHUB_ENV
-          echo "EOF" >> $GITHUB_ENV
-          echo "Found all target dirs:"
+          ALL_DIRS=$(find ./uos -maxdepth 1 -type d -name "python3.*" | sort)
+          echo "ALL_DIRS<<EOF" >> $GITHUB_OUTPUT
+          echo "${ALL_DIRS}" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          echo "Detected directories:"
           echo "${ALL_DIRS}"
 
       - name: Calculate changed directories
         id: gen_matrix
         env:
-          ALL_DIRS: ${{ env.ALL_DIRS }}
+          ALL_DIRS: ${{ steps.scan_dirs.outputs.ALL_DIRS }}
           EVENT: ${{ github.event_name }}
           REF_TYPE: ${{ github.ref_type }}
         run: |
@@ -54,11 +50,9 @@ jobs:
           EVENT="${EVENT}"
           REF_TYPE="${REF_TYPE}"
 
-          # 定时任务 / tag推送：全量构建所有目录
           if [[ "${EVENT}" == "schedule" || "${REF_TYPE}" == "tag" ]]; then
             TARGETS="${ALL_DIRS}"
           else
-            # 获取变更文件列表，兼容before为空场景
             if [[ "${EVENT}" == "pull_request" ]]; then
               DIFF_FILES=$(git diff --name-only origin/${{ github.base_ref }} HEAD)
             else
@@ -69,17 +63,18 @@ jobs:
               fi
             fi
 
+            echo "==== Changed files ===="
+            echo "${DIFF_FILES}"
+
             TARGETS=""
             while IFS= read -r dir; do
               PREFIX="${dir}/"
-              # 只要该目录下任意文件变更（包含Dockerfile）即触发构建
-              if echo "${DIFF_FILES}" | grep -q "^${PREFIX}"; then
+              if echo "${DIFF_FILES}" | grep -q "${PREFIX}"; then
                 TARGETS+="${dir}"$'\n'
               fi
             done <<< "${ALL_DIRS}"
           fi
 
-          # 清除空行，生成矩阵JSON
           TARGETS=$(echo "${TARGETS}" | sed '/^\s*$/d')
           if [[ -z "${TARGETS}" ]]; then
             MATRIX='{"context_dir":[]}'
@@ -91,72 +86,56 @@ jobs:
 
   build:
     needs: discovery
-    if: ${{ toJson(fromJson(needs.discovery.outputs.matrix).context_dir) != '[]' }}
+    if: ${{ toJson(needs.discovery.outputs.matrix) != '{"context_dir":[]}' }}
     runs-on: ubuntu-latest
     strategy:
-      fail-fast: false
       matrix: ${{ fromJson(needs.discovery.outputs.matrix) }}
-
     steps:
-      - name: Checkout repository
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Extract version tag
-        id: taginfo
-        run: |
-          # uos/python3.11 → python3.11 → 3.11
-          FOLDER_NAME=$(basename ${{ matrix.context_dir }})
-          VERSION_TAG=${FOLDER_NAME#python}
-          echo "TAG=${VERSION_TAG}" >> $GITHUB_ENV
-          echo "DOCKERFILE_PATH=./${{ matrix.context_dir }}/Dockerfile" >> $GITHUB_ENV
-
-      - name: Install cosign
-        if: github.event_name != 'pull_request'
-        uses: sigstore/cosign-installer@59acb6260d9c0ba8f4a2f9d9b48431a222b68e20 #v3.5.0
-        with:
-          cosign-release: 'v2.2.4'
-
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@f95db51fddba0c2d1ec667646a06c2ce06100226 # v3.0.0
+        uses: docker/setup-buildx-action@v3
 
-      - name: Log into registry ${{ env.REGISTRY }}
+      - name: Login to GHCR
         if: github.event_name != 'pull_request'
-        uses: docker/login-action@343f7c4344506bcbf9b4de18042ae17996df046d # v3.0.0
+        uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push Docker image
-        id: build-and-push
-        env:
-          DOCKERFILE_PATH: ${{ env.DOCKERFILE_PATH }}
-          TAG: ${{ env.TAG }}
-        uses: docker/build-push-action@0565240e2d4ab88bba5387d719585280857ece09 # v5.0.0
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
         with:
-          context: ./${{ matrix.context_dir }}
-          file: ${{ env.DOCKERFILE_PATH }}
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_REPO }}
+          tags: |
+            type=ref,event=branch
+            type=sha,format=short
+
+      - name: Build and push
+        id: build-and-push
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context_dir }}
           platforms: ${{ env.PLATFORMS }}
           push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_REPO }}:${{ env.TAG }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          secrets: |
-              GIT_AUTH_TOKEN=${{ secrets.GITHUB_TOKEN }}
+          tags: ${{ steps.meta.outputs.tags }}
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_REPO }}:buildcache
+          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_REPO }}:buildcache,mode=max
 
-      # - name: Sign the published Docker image
-      #   if: ${{ github.event_name != 'pull_request' }}
-      #   env:
-      #     FULL_IMAGE_TAG: ${{ env.REGISTRY }}/${{ env.IMAGE_REPO }}:${{ env.TAG }}
-      #     DIGEST: ${{ steps.build-and-push.outputs.digest }}
-      #   run: cosign sign --yes ${FULL_IMAGE_TAG}@${DIGEST}
+      - name: Install cosign
+        if: ${{ github.event_name != 'pull_request' }}
+        uses: sigstore/cosign-installer@v3
+
       - name: Sign the published Docker image
         if: ${{ github.event_name != 'pull_request' }}
         env:
           REGISTRY: ${{ env.REGISTRY }}
           IMAGE_REPO: ${{ env.IMAGE_REPO }}
-          TAG: ${{ env.TAG }}
+          TAG: ${{ steps.meta.outputs.tags }}
           DIGEST: ${{ steps.build-and-push.outputs.digest }}
         run: |
-          FULL_IMAGE_TAG="${REGISTRY}/${IMAGE_REPO}:${TAG}"
+          FULL_IMAGE_TAG="${REGISTRY}/${IMAGE_REPO}:${TAG%%,*}"
           cosign sign --yes "${FULL_IMAGE_TAG}@${DIGEST}"
