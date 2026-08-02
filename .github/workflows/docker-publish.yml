@@ -22,7 +22,8 @@ jobs:
   discovery:
     runs-on: ubuntu-latest
     outputs:
-      matrix: ${{ steps.gen_matrix.outputs.matrix }}
+      matrix_data: ${{ steps.gen_matrix.outputs.matrix_data }}
+      has_work: ${{ steps.gen_matrix.outputs.has_work }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
@@ -77,26 +78,25 @@ jobs:
 
           TARGETS=$(echo "${TARGETS}" | sed '/^\s*$/d')
           if [[ -z "${TARGETS}" ]]; then
-            MATRIX='{"context_dir":["__SKIP__"]}'
+            MATRIX='{"context_dir":[]}'
+            HAS_WORK="false"
           else
             MATRIX=$(echo "${TARGETS}" | jq -R . | jq -s '{"context_dir":.}')
+            HAS_WORK="true"
           fi
-          echo "matrix=${MATRIX}" >> $GITHUB_OUTPUT
-          echo "Final build matrix: ${MATRIX}"
+          echo "matrix_data=${MATRIX}" >> $GITHUB_OUTPUT
+          echo "has_work=${HAS_WORK}" >> $GITHUB_OUTPUT
+          echo "Matrix data: ${MATRIX}"
+          echo "Has work to build: ${HAS_WORK}"
 
   build:
     needs: discovery
+    # 关键：无变更时整个build job不会被创建，不存在矩阵解析报错！
+    if: ${{ needs.discovery.outputs.has_work == 'true' }}
     runs-on: ubuntu-latest
     strategy:
-      matrix: ${{ fromJson(needs.discovery.outputs.matrix) }}
+      matrix: ${{ fromJson(needs.discovery.outputs.matrix_data) }}
     steps:
-      # 【关键】占位判断放在最顶部，优先执行，短路后续所有步骤
-      - name: Skip empty build placeholder
-        if: matrix.context_dir == '__SKIP__'
-        run: |
-          echo "✅ No directories modified, skip all build steps"
-          exit 0
-
       - name: Checkout code
         uses: actions/checkout@v5
 
