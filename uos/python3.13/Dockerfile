@@ -206,7 +206,7 @@ RUN set -eux; \
         wheel; \
     # 创建应用目录并设置权限
     mkdir -p /${APP_USER}; \
-    # 创建非root用户（安全最佳实践）
+    # 创建非root用户
     groupadd -g 1000 ${APP_USER}; \
     useradd -r -u 1000 -g ${APP_USER} -d /${APP_USER} -s /bin/bash ${APP_USER} ; \
     chown -R ${APP_USER}:${APP_USER} /${APP_USER}; \
