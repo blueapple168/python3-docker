@@ -1,5 +1,5 @@
 # ==============================================================================
-# 多阶段构建：UOS Server 20 Python 混合运行时镜像
+# 多阶段构建：UOS Server 20 Python 运行时镜像
 # 构建阶段：builder 编译 Python3.14；运行阶段：交付最终业务镜像
 # 基础镜像：registry.uniontech.com/uos-server-base/uos-server-20-1070a:latest
 # 内置组件：Python3.14.6
