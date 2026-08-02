@@ -77,7 +77,7 @@ jobs:
 
           TARGETS=$(echo "${TARGETS}" | sed '/^\s*$/d')
           if [[ -z "${TARGETS}" ]]; then
-            MATRIX='{"context_dir":[]}'
+            MATRIX='{"context_dir":["__SKIP__"]}'
           else
             MATRIX=$(echo "${TARGETS}" | jq -R . | jq -s '{"context_dir":.}')
           fi
@@ -86,11 +86,14 @@ jobs:
 
   build:
     needs: discovery
-    if: ${{ toJson(needs.discovery.outputs.matrix) != '{"context_dir":[]}' }}
     runs-on: ubuntu-latest
     strategy:
       matrix: ${{ fromJson(needs.discovery.outputs.matrix) }}
     steps:
+      - name: Skip placeholder matrix entry
+        if: matrix.context_dir == '__SKIP__'
+        run: echo "No directories changed, skip build" && exit 0
+
       - name: Checkout code
         uses: actions/checkout@v4
 
@@ -134,8 +137,9 @@ jobs:
         env:
           REGISTRY: ${{ env.REGISTRY }}
           IMAGE_REPO: ${{ env.IMAGE_REPO }}
-          TAG: ${{ steps.meta.outputs.tags }}
+          TAG_LIST: ${{ steps.meta.outputs.tags }}
           DIGEST: ${{ steps.build-and-push.outputs.digest }}
         run: |
-          FULL_IMAGE_TAG="${REGISTRY}/${IMAGE_REPO}:${TAG%%,*}"
+          FIRST_TAG=$(echo "${TAG_LIST}" | cut -d',' -f1)
+          FULL_IMAGE_TAG="${REGISTRY}/${IMAGE_REPO}:${FIRST_TAG#*:}"
           cosign sign --yes "${FULL_IMAGE_TAG}@${DIGEST}"
