@@ -5,8 +5,9 @@
 # 内置组件：Python3.14.6
 # 支持架构：x86_64 aarch64
 # ==============================================================================
-ARG BASE_IMAGE_TAG=uos-server-20-1070a:latest
-FROM ghcr.io/blueapple168/${BASE_IMAGE_TAG} AS builder
+ARG BASE_IMAGE_TAG=uos-server-20-1070a
+FROM registry.uniontech.com/uos-server-base/${BASE_IMAGE_TAG} AS builder
+
 # OCI标准容器标签
 LABEL org.opencontainers.image.authors="blueapple" \
       org.opencontainers.image.version="python 3.14.6" \
@@ -14,7 +15,7 @@ LABEL org.opencontainers.image.authors="blueapple" \
       org.opencontainers.image.licenses="Internal" \
       org.opencontainers.image.vendor="Enterprise" \
       os="UnionTechOS Server 20" \
-      os.version="${BASE_IMAGE_TAG%%:*}" \
+      os.version="${BASE_IMAGE_TAG}" \
       component="python-runtime"
 
 # 构建阶段
@@ -109,7 +110,7 @@ RUN set -eux; \
     ldconfig
 
 # 运行时阶段 - 使用更小的基础镜像
-FROM ghcr.io/blueapple168/uos-server-20-1070a:latest
+FROM registry.uniontech.com/uos-server-base/uos-server-20-1070a:latest
 
 # 最小化运行时环境
 ENV LANG=C.UTF-8 \
@@ -126,45 +127,39 @@ ENV LANG=C.UTF-8 \
 
 # 只安装运行时必要的依赖
 RUN set -eux; \
-    sed -i 's/\$StateMode/ufu/g' /etc/yum.repos.d/UnionTechOS.repo; \
-    yum makecache; \
-    yum install -y --setopt=install_weak_deps=False \
-        ca-certificates \
-        openssl \
-        libffi \
-        zlib \
-        bzip2 \
-        xz \
-        sqlite \
-        tk \
-        ncurses \
-        gdbm \
-        libnsl2 \
-        bluez-libs \
-        libuuid \
-        findutils \
-        which \
-        tzdata \
-        # 系统python3的最小依赖
-        python3-libs \
-    ; \
-    # 清理包管理器缓存
-    yum clean all; \
-    rm -rf \
-        /var/cache/yum/* \
-        /tmp/* \
-        /var/tmp/* \
-        /usr/share/man/* \
-        /usr/share/doc/* \
-        # 删除不必要的本地化文件（保留英文和中文）
-        /usr/share/locale/[a-df-z]* \
-        /usr/share/locale/e[!n]* \
-        /usr/share/locale/en@* \
-        /usr/share/locale/en_* \
-        /usr/share/locale/zh_* \
-    ; \
-    # 设置时区
-    ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+sed -i 's/\$StateMode/ufu/g' /etc/yum.repos.d/UnionTechOS.repo; \
+yum makecache; \
+yum install -y --setopt=install_weak_deps=False \
+    ca-certificates \
+    openssl \
+    libffi \
+    zlib \
+    bzip2 \
+    xz \
+    sqlite \
+    tk \
+    ncurses \
+    gdbm \
+    libnsl2 \
+    bluez-libs \
+    libuuid \
+    findutils \
+    which \
+    tzdata \
+    python3-libs; \
+yum clean all; \
+rm -rf \
+    /var/cache/yum/* \
+    /tmp/* \
+    /var/tmp/* \
+    /usr/share/man/* \
+    /usr/share/doc/* \
+    /usr/share/locale/[a-df-z]* \
+    /usr/share/locale/e[!n]* \
+    /usr/share/locale/en@* \
+    /usr/share/locale/en_* \
+    /usr/share/locale/zh_*; \
+ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
 # 从构建阶段复制已编译的Python
 COPY --from=builder /usr/local /usr/local
