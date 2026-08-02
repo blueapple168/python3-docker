@@ -11,7 +11,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_REPO: blueapple/uos-python
+  IMAGE_REPO: blueapple168/python3-docker/uos-python
   PLATFORMS: linux/amd64,linux/arm64
 
 permissions:
@@ -83,7 +83,6 @@ jobs:
             MATRIX='{"context_dir":[]}'
             HAS_WORK="false"
           else
-            # --compact-output 输出单行JSON，解决output多行报错！
             MATRIX=$(echo "${TARGETS}" | jq -R . | jq -s --compact-output '{"context_dir":.}')
             HAS_WORK="true"
           fi
@@ -98,9 +97,20 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix: ${{ fromJson(needs.discovery.outputs.matrix_data) }}
+    env:
+      CONTEXT_DIR: ${{ matrix.context_dir }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
+
+      - name: Extract Python Version Tag from directory
+        id: extract_version
+        run: |
+          # ./uos/python3.13 截取出 3.13
+          DIR_NAME=$(basename ${CONTEXT_DIR})
+          VERSION=${DIR_NAME#python}
+          echo "PY_VERSION=${VERSION}" >> $GITHUB_OUTPUT
+          echo "目录名称：${DIR_NAME}，提取版本Tag：${VERSION}"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -119,8 +129,10 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_REPO }}
           tags: |
-            type=ref,event=branch
-            type=sha,format=short
+            # 核心：使用目录提取出来的版本号作为主tag
+            type=raw,value=${{ steps.extract_version.outputs.PY_VERSION }}
+            # 可选附加tag：版本+短commit sha（例如3.13-sha-xxxx）
+            type=raw,value=${{ steps.extract_version.outputs.PY_VERSION }}-${{ github.sha }},enable=${{ github.event_name != 'pull_request' }}
 
       - name: Build and push
         id: build-and-push
