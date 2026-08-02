@@ -1,2 +1,2 @@
 # python3-docker
-UOS Server v20 1070a Python3 混合运行时镜像
+UOS Server v20 1070a Python3 运行时镜像
