@@ -9,7 +9,7 @@ ARG BASE_IMAGE_TAG=uos-server-20-1070a:latest
 FROM ghcr.io/blueapple168/${BASE_IMAGE_TAG} AS builder
 
 # OCI标准容器标签
-LABEL org.opencontainers.image.authors="baidongying@cnpc.com.cn" \
+LABEL org.opencontainers.image.authors="blueapple" \
       org.opencontainers.image.version="python 3.13.14" \
       org.opencontainers.image.description="UOS Server 20 | Python3.13 Runtime" \
       org.opencontainers.image.licenses="Internal" \
