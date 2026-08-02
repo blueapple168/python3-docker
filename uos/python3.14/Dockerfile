@@ -5,8 +5,8 @@
 # 内置组件：Python3.14.6
 # 支持架构：x86_64 aarch64
 # ==============================================================================
-ARG BASE_IMAGE_TAG=uos-server-20-1070a
-FROM registry.uniontech.com/uos-server-base/${BASE_IMAGE_TAG} AS builder
+ARG BASE_IMAGE_TAG=uos-server-20-1070a:latest
+FROM ghcr.io/blueapple168/${BASE_IMAGE_TAG} AS builder
 
 # OCI标准容器标签
 LABEL org.opencontainers.image.authors="blueapple" \
@@ -110,7 +110,7 @@ RUN set -eux; \
     ldconfig
 
 # 运行时阶段 - 使用更小的基础镜像
-FROM registry.uniontech.com/uos-server-base/uos-server-20-1070a:latest
+FROM ghcr.io/blueapple168/uos-server-20-1070a:latest
 
 # 最小化运行时环境
 ENV LANG=C.UTF-8 \
