@@ -79,13 +79,20 @@ jobs:
         with:
           context: .
           file: ./uos/python3.14/Dockerfile
-          # ========= 新增多架构平台配置 =========
+          # ========= MULTI PLATFORMS CONFIG =========
           platforms: ${{ env.PLATFORMS }}
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          # ==========ADD GIT_AUTH_TOKEN==========
+          secrets: |
+              GIT_AUTH_TOKEN=${{ secrets.GITHUB_TOKEN }}
+          registries: |
+              ghcr.io:
+                username: blueapple168
+                password: ${{ secrets.GHCR_READ_TOKEN }}          
 
       # Sign the resulting Docker image digest except on PRs.
       # This will only write to the public Rekor transparency log when the Docker
