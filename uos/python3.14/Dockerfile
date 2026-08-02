@@ -3,7 +3,7 @@
 # 构建阶段：builder 编译 Python3.14；运行阶段：交付最终业务镜像
 # 基础镜像：registry.uniontech.com/uos-server-base/uos-server-20-1070a:latest
 # 内置组件：Python3.14.6
-# 支持架构：x86_64/aarch64
+# 支持架构：x86_64 aarch64
 # ==============================================================================
 ARG BASE_IMAGE_TAG=uos-server-20-1070a:latest
 FROM ghcr.io/blueapple168/${BASE_IMAGE_TAG} AS builder
