@@ -30,20 +30,26 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Scan all target directories
+      # 【稳定方案】使用专用action获取变更文件，替代脆弱的git diff
+      - name: Get changed files
+        id: changed-files
+        uses: tj-actions/changed-files@v45
+
+      - name: Scan all python版本目录
         id: scan_dirs
         run: |
           ALL_DIRS=$(find ./uos -maxdepth 1 -type d -name "python3.*" | sort)
           echo "ALL_DIRS<<EOF" >> $GITHUB_OUTPUT
           echo "${ALL_DIRS}" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
-          echo "Detected directories:"
+          echo "检测目录列表："
           echo "${ALL_DIRS}"
 
-      - name: Calculate changed directories
+      - name: Match changed directories
         id: gen_matrix
         env:
           ALL_DIRS: ${{ steps.scan_dirs.outputs.ALL_DIRS }}
+          CHANGED_FILES: ${{ steps.changed-files.outputs.all_changed_files }}
           EVENT: ${{ github.event_name }}
           REF_TYPE: ${{ github.ref_type }}
         run: |
@@ -51,32 +57,30 @@ jobs:
           EVENT="${EVENT}"
           REF_TYPE="${REF_TYPE}"
 
+          # 定时任务 / tag推送：全量构建
           if [[ "${EVENT}" == "schedule" || "${REF_TYPE}" == "tag" ]]; then
             TARGETS="${ALL_DIRS}"
           else
-            if [[ "${EVENT}" == "pull_request" ]]; then
-              DIFF_FILES=$(git diff --name-only origin/${{ github.base_ref }} HEAD)
-            else
-              if [[ -z "${{ github.event.before }}" || "${{ github.event.before }}" == "0000000000000000000000000000000000000000" ]]; then
-                DIFF_FILES=$(git ls-files)
-              else
-                DIFF_FILES=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }})
-              fi
-            fi
-
-            echo "==== Changed files ===="
-            echo "${DIFF_FILES}"
-
+            echo "==== 变更文件列表 ===="
+            echo "${CHANGED_FILES}"
+            echo "======================"
             TARGETS=""
             while IFS= read -r dir; do
-              PREFIX="${dir}/"
-              if echo "${DIFF_FILES}" | grep -q "${PREFIX}"; then
-                TARGETS+="${dir}"$'\n'
-              fi
+              [[ -z "${dir}" ]] && continue
+              echo "校验目录：${dir}"
+              while IFS= read -r file; do
+                [[ -z "${file}" ]] && continue
+                if [[ "${file}" == "${dir}/"* ]]; then
+                  echo "✅ 文件匹配：${file} → ${dir}"
+                  TARGETS+="${dir}"$'\n'
+                  break
+                fi
+              done <<< "${CHANGED_FILES}"
             done <<< "${ALL_DIRS}"
           fi
 
-          TARGETS=$(echo "${TARGETS}" | sed '/^\s*$/d')
+          # 去重清理
+          TARGETS=$(echo "${TARGETS}" | sort -u | sed '/^\s*$/d')
           if [[ -z "${TARGETS}" ]]; then
             MATRIX='{"context_dir":[]}'
             HAS_WORK="false"
@@ -86,12 +90,11 @@ jobs:
           fi
           echo "matrix_data=${MATRIX}" >> $GITHUB_OUTPUT
           echo "has_work=${HAS_WORK}" >> $GITHUB_OUTPUT
-          echo "Matrix data: ${MATRIX}"
-          echo "Has work to build: ${HAS_WORK}"
+          echo "最终矩阵：${MATRIX}"
+          echo "是否需要构建：${HAS_WORK}"
 
   build:
     needs: discovery
-    # 关键：无变更时整个build job不会被创建，不存在矩阵解析报错！
     if: ${{ needs.discovery.outputs.has_work == 'true' }}
     runs-on: ubuntu-latest
     strategy:
