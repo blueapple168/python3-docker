@@ -63,7 +63,6 @@ jobs:
             echo "==== 变更文件列表 ===="
             echo "${CHANGED_FILES}"
             echo "======================"
-            # 进程替换，规避子shell变量丢失问题
             while IFS= read -r dir; do
               [[ -z "${dir}" ]] && continue
               clean_dir="${dir#./}"
@@ -84,7 +83,8 @@ jobs:
             MATRIX='{"context_dir":[]}'
             HAS_WORK="false"
           else
-            MATRIX=$(echo "${TARGETS}" | jq -R . | jq -s '{"context_dir":.}')
+            # --compact-output 输出单行JSON，解决output多行报错！
+            MATRIX=$(echo "${TARGETS}" | jq -R . | jq -s --compact-output '{"context_dir":.}')
             HAS_WORK="true"
           fi
           echo "matrix_data=${MATRIX}" >> $GITHUB_OUTPUT
