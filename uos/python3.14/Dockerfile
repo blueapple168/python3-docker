@@ -5,7 +5,7 @@
 # 内置组件：Python3.14.6
 # 支持架构：x86_64 aarch64
 # ==============================================================================
-ARG BASE_IMAGE_TAG=uos-server-20-1070a
+ARG BASE_IMAGE_TAG=uos-server-20-1070a:latest
 FROM registry.uniontech.com/uos-server-base/${BASE_IMAGE_TAG} AS builder
 
 # OCI标准容器标签
@@ -15,7 +15,7 @@ LABEL org.opencontainers.image.authors="blueapple" \
       org.opencontainers.image.licenses="Internal" \
       org.opencontainers.image.vendor="Enterprise" \
       os="UnionTechOS Server 20" \
-      os.version="${BASE_IMAGE_TAG}" \
+      os.version="${BASE_IMAGE_TAG%%:*}" \
       component="python-runtime"
 
 # 构建阶段
