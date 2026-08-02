@@ -33,7 +33,7 @@ jobs:
       - name: Scan all python version directories under uos/
         id: scan_dirs
         run: |
-          # 精准匹配 uos/python3.xx 目录，内部存在Dockerfile
+          # 匹配 uos/python3.11、python3.12 格式目录，目录内包含Dockerfile
           ALL_DIRS=$(find ./uos -maxdepth 1 -type d -name "python3.*" | while read d; do
             if [ -f "${d}/Dockerfile" ]; then echo "$d"; fi
           done | sort -u)
@@ -58,16 +58,21 @@ jobs:
           if [[ "${EVENT}" == "schedule" || "${REF_TYPE}" == "tag" ]]; then
             TARGETS="${ALL_DIRS}"
           else
-            # Push/PR：基于diff筛选变更目录
+            # 获取变更文件列表，兼容before为空场景
             if [[ "${EVENT}" == "pull_request" ]]; then
               DIFF_FILES=$(git diff --name-only origin/${{ github.base_ref }} HEAD)
             else
-              DIFF_FILES=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }})
+              if [[ -z "${{ github.event.before }}" || "${{ github.event.before }}" == "0000000000000000000000000000000000000000" ]]; then
+                DIFF_FILES=$(git ls-files)
+              else
+                DIFF_FILES=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }})
+              fi
             fi
 
             TARGETS=""
             while IFS= read -r dir; do
               PREFIX="${dir}/"
+              # 只要该目录下任意文件变更（包含Dockerfile）即触发构建
               if echo "${DIFF_FILES}" | grep -q "^${PREFIX}"; then
                 TARGETS+="${dir}"$'\n'
               fi
@@ -86,7 +91,6 @@ jobs:
 
   build:
     needs: discovery
-    # ✅ 修复核心：正确判断空数组，规避matrix空值报错
     if: ${{ toJson(fromJson(needs.discovery.outputs.matrix).context_dir) != '[]' }}
     runs-on: ubuntu-latest
     strategy:
@@ -100,7 +104,7 @@ jobs:
       - name: Extract version tag
         id: taginfo
         run: |
-          # uos/python3.11 → python3.11 → 截取出 3.11
+          # uos/python3.11 → python3.11 → 3.11
           FOLDER_NAME=$(basename ${{ matrix.context_dir }})
           VERSION_TAG=${FOLDER_NAME#python}
           echo "TAG=${VERSION_TAG}" >> $GITHUB_ENV
@@ -140,9 +144,19 @@ jobs:
           secrets: |
               GIT_AUTH_TOKEN=${{ secrets.GITHUB_TOKEN }}
 
+      # - name: Sign the published Docker image
+      #   if: ${{ github.event_name != 'pull_request' }}
+      #   env:
+      #     FULL_IMAGE_TAG: ${{ env.REGISTRY }}/${{ env.IMAGE_REPO }}:${{ env.TAG }}
+      #     DIGEST: ${{ steps.build-and-push.outputs.digest }}
+      #   run: cosign sign --yes ${FULL_IMAGE_TAG}@${DIGEST}
       - name: Sign the published Docker image
         if: ${{ github.event_name != 'pull_request' }}
         env:
-          FULL_IMAGE_TAG: ${{ env.REGISTRY }}/${{ env.IMAGE_REPO }}:${{ env.TAG }}
+          REGISTRY: ${{ env.REGISTRY }}
+          IMAGE_REPO: ${{ env.IMAGE_REPO }}
+          TAG: ${{ env.TAG }}
           DIGEST: ${{ steps.build-and-push.outputs.digest }}
-        run: cosign sign --yes ${FULL_IMAGE_TAG}@${DIGEST}
+        run: |
+          FULL_IMAGE_TAG="${REGISTRY}/${IMAGE_REPO}:${TAG}"
+          cosign sign --yes "${FULL_IMAGE_TAG}@${DIGEST}"
