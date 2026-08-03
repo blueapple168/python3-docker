@@ -17,6 +17,8 @@ env:
 permissions:
   contents: read
   packages: write
+  # keyless cosign 签名必须开启id-token权限
+  id-token: write
 
 jobs:
   discovery:
@@ -106,7 +108,6 @@ jobs:
       - name: Extract Python Version Tag from directory
         id: extract_version
         run: |
-          # ./uos/python3.13 截取出 3.13
           DIR_NAME=$(basename ${CONTEXT_DIR})
           VERSION=${DIR_NAME#python}
           echo "PY_VERSION=${VERSION}" >> $GITHUB_OUTPUT
@@ -129,10 +130,8 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_REPO }}
           tags: |
-            # 核心：使用目录提取出来的版本号作为主tag
             type=raw,value=${{ steps.extract_version.outputs.PY_VERSION }}
-            # 可选附加tag：版本+短commit sha（例如3.13-sha-xxxx）
-            type=raw,value=${{ steps.extract_version.outputs.PY_VERSION }}-${{ github.sha }},enable=${{ github.event_name != 'pull_request' }}
+            type=raw,value=${{ steps.extract_version.outputs.PY_VERSION }}-${{ github.sha }}
 
       - name: Build and push
         id: build-and-push
@@ -149,14 +148,12 @@ jobs:
         if: ${{ github.event_name != 'pull_request' }}
         uses: sigstore/cosign-installer@v3
 
-      - name: Sign the published Docker image
+      - name: Keyless Sign Image (only sign digest once)
         if: ${{ github.event_name != 'pull_request' }}
         env:
-          REGISTRY: ${{ env.REGISTRY }}
-          IMAGE_REPO: ${{ env.IMAGE_REPO }}
-          TAG_LIST: ${{ steps.meta.outputs.tags }}
-          DIGEST: ${{ steps.build-and-push.outputs.digest }}
+          COSIGN_EXPERIMENTAL: "1"
         run: |
-          FIRST_TAG=$(echo "${TAG_LIST}" | cut -d',' -f1)
-          FULL_IMAGE_TAG="${REGISTRY}/${IMAGE_REPO}:${FIRST_TAG#*:}"
-          cosign sign --yes "${FULL_IMAGE_TAG}@${DIGEST}"
+          IMAGE_FULL="${{ env.REGISTRY }}/${{ env.IMAGE_REPO }}"
+          DIGEST="${{ steps.build-and-push.outputs.digest }}"
+          echo "Start signing ${IMAGE_FULL}@${DIGEST}"
+          cosign sign --yes "${IMAGE_FULL}@${DIGEST}"
