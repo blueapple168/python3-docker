@@ -17,7 +17,6 @@ env:
 permissions:
   contents: read
   packages: write
-  # keyless cosign 签名必须开启id-token权限
   id-token: write
 
 jobs:
@@ -113,7 +112,6 @@ jobs:
           echo "PY_VERSION=${VERSION}" >> $GITHUB_OUTPUT
           echo "目录名称：${DIR_NAME}，提取版本Tag：${VERSION}"
 
-      # 🔴新增：QEMU必须在setup‑buildx之前执行，用于arm64仿真构建
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
         with:
@@ -149,6 +147,8 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_REPO }}:buildcache
           cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_REPO }}:buildcache,mode=max
+          build-args: |
+            BUILDKIT_PROGRESS=plain
 
       - name: Print built image info
         run: |
@@ -156,7 +156,6 @@ jobs:
           echo "Built image: ${IMG}"
           echo "Digest: ${{ steps.build-and-push.outputs.digest }}"
 
-      # 🔴新增：镜像有效性校验，amd64/arm64分别执行python，失败直接终止job，不会推送坏镜像
       - name: Validate amd64 python runtime
         run: |
           IMG="${{ env.REGISTRY }}/${{ env.IMAGE_REPO }}:${{ steps.extract_version.outputs.PY_VERSION }}"
@@ -171,7 +170,7 @@ jobs:
         if: ${{ github.event_name != 'pull_request' }}
         uses: sigstore/cosign-installer@v3
 
-      - name: Keyless Sign Image (only sign digest once)
+      - name: Keyless Sign Image
         if: ${{ github.event_name != 'pull_request' }}
         env:
           COSIGN_EXPERIMENTAL: "1"
