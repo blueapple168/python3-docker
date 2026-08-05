@@ -113,6 +113,12 @@ jobs:
           echo "PY_VERSION=${VERSION}" >> $GITHUB_OUTPUT
           echo "目录名称：${DIR_NAME}，提取版本Tag：${VERSION}"
 
+      # 🔴新增：QEMU必须在setup‑buildx之前执行，用于arm64仿真构建
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          qemu-version: latest
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
@@ -143,6 +149,23 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_REPO }}:buildcache
           cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_REPO }}:buildcache,mode=max
+
+      - name: Print built image info
+        run: |
+          IMG="${{ env.REGISTRY }}/${{ env.IMAGE_REPO }}:${{ steps.extract_version.outputs.PY_VERSION }}"
+          echo "Built image: ${IMG}"
+          echo "Digest: ${{ steps.build-and-push.outputs.digest }}"
+
+      # 🔴新增：镜像有效性校验，amd64/arm64分别执行python，失败直接终止job，不会推送坏镜像
+      - name: Validate amd64 python runtime
+        run: |
+          IMG="${{ env.REGISTRY }}/${{ env.IMAGE_REPO }}:${{ steps.extract_version.outputs.PY_VERSION }}"
+          docker run --rm --platform linux/amd64 "${IMG}" python3 -c "import platform;print('amd64 ok:', platform.machine(), platform.python_version())"
+
+      - name: Validate arm64 python runtime
+        run: |
+          IMG="${{ env.REGISTRY }}/${{ env.IMAGE_REPO }}:${{ steps.extract_version.outputs.PY_VERSION }}"
+          docker run --rm --platform linux/arm64 "${IMG}" python3 -c "import platform;print('arm64 ok:', platform.machine(), platform.python_version())"
 
       - name: Install cosign
         if: ${{ github.event_name != 'pull_request' }}
