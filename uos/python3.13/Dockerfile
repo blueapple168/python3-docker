@@ -8,7 +8,7 @@
 ARG BASE_IMAGE_TAG=uos-server-20-1070a:latest
 FROM ghcr.io/blueapple168/${BASE_IMAGE_TAG} AS builder
 
-🔴【修改】# buildx 注入目标架构，必须定义在builder阶段顶层
+# 🔴【修改】# buildx 注入目标架构，必须定义在builder阶段顶层
 ARG TARGETARCH
 
 # OCI标准容器标签
@@ -74,7 +74,7 @@ RUN set -eux; \
 
 # 编译Python（优化编译参数）
 WORKDIR /usr/src/python
-🔴【修改】# 移除旧的 uname -m 探测；使用buildx传入TARGETARCH做交叉编译
+# 🔴【修改】# 移除旧的 uname -m 探测；使用buildx传入TARGETARCH做交叉编译
 RUN set -eux; \
     case "${TARGETARCH}" in \
         amd64) \
@@ -108,7 +108,7 @@ RUN set -eux; \
     # 立即配置动态链接库
     echo "/usr/local/lib" > /etc/ld.so.conf.d/python3.13.conf; \
     ldconfig; \
-🔴【修改】# 去掉 || echo 容错，编译出来不能运行直接终止构建
+# 🔴【修改】# 去掉 || echo 容错，编译出来不能运行直接终止构建
     /usr/local/bin/python3.13 --version; \
     # 清理编译中间文件
     find /usr/local -type f -executable -not \( -name '*tkinter*' \) -exec strip '{}' + || true; \
