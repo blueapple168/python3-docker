@@ -59,12 +59,12 @@ RUN set -eux; \
 
 # Python编译参数
 ENV PYTHON_VERSION=3.13.14 \
-    PYTHON_SHA256=63c709efd0345097b40ac05a25f49e1a8eb41cd80c419f7181735a038f1a1c1c
+    PYTHON_SHA256=639e43243c620a308f968213df9e00f2f8f62332f7adbaa7a7eeb9783057c690
 
 # 下载源码
 RUN set -eux; \
     cd /tmp; \
-    wget -O python.tar.xz "https://mirrors.huaweicloud.com/python/${PYTHON_VERSION}/Python-${PYTHON_VERSION}.tar.xz"; \
+    wget -O python.tar.xz "https://www.python.org/ftp/python/${PYTHON_VERSION}/Python-${PYTHON_VERSION}.tar.xz"; \
     echo "${PYTHON_SHA256}  python.tar.xz" | sha256sum -c -; \
     mkdir -p /usr/src/python; \
     tar --extract --file=python.tar.xz --directory=/usr/src/python --strip-components=1; \
