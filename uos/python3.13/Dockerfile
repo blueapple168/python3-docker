@@ -104,6 +104,7 @@ RUN set -eux; \
 # 运行时阶段
 # ------------------------------
 FROM ghcr.io/blueapple168/${BASE_IMAGE_TAG} AS runtime
+ARG BASE_IMAGE_TAG
 
 ENV LANG=C.UTF-8 \
     LC_ALL=C.UTF-8 \
