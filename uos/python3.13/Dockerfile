@@ -8,6 +8,9 @@
 ARG BASE_IMAGE_TAG=uos-server-20-1070a:latest
 FROM ghcr.io/blueapple168/${BASE_IMAGE_TAG} AS builder
 
+🔴【修改】# buildx 注入目标架构，必须定义在builder阶段顶层
+ARG TARGETARCH
+
 # OCI标准容器标签
 LABEL org.opencontainers.image.authors="blueapple" \
       org.opencontainers.image.version="python 3.13.14" \
@@ -59,7 +62,6 @@ ENV GPG_KEY=7169605F62C751356D054A26A821E680E5FA6305 \
     PYTHON_VERSION=3.13.14 \
     PYTHON_SHA256=639e43243c620a308f968213df9e00f2f8f62332f7adbaa7a7eeb9783057c690
 
-#COPY python.tar.xz /tmp/python.tar.xz
 # 下载和验证Python源码
 RUN set -eux; \
     cd /tmp/; \
@@ -72,24 +74,28 @@ RUN set -eux; \
 
 # 编译Python（优化编译参数）
 WORKDIR /usr/src/python
+🔴【修改】# 移除旧的 uname -m 探测；使用buildx传入TARGETARCH做交叉编译
 RUN set -eux; \
-    export gnuArch="$(uname -m)"; \
-    case "$gnuArch" in \
-        x86_64) gnuArch='x86_64-linux-gnu' ;; \
-        aarch64) gnuArch='aarch64-linux-gnu' ;; \
-        *) echo "Unsupported architecture: $gnuArch"; exit 1 ;; \
+    case "${TARGETARCH}" in \
+        amd64) \
+            BUILD_ARCH=x86_64-linux-gnu; \
+            HOST_ARCH=x86_64-linux-gnu; \
+        ;; \
+        arm64) \
+            BUILD_ARCH=x86_64-linux-gnu; \
+            HOST_ARCH=aarch64-linux-gnu; \
+        ;; \
+        *) echo "Unsupported TARGETARCH: ${TARGETARCH}"; exit 1 ;; \
     esac; \
     ./configure \
-        --build="$gnuArch" \
+        --build="${BUILD_ARCH}" \
+        --host="${HOST_ARCH}" \
         --enable-loadable-sqlite-extensions \
         --enable-optimizations \
         --enable-option-checking=fatal \
         --enable-shared \
         --with-lto \
-        --with-ensurepip=install \
         --prefix=/usr/local \
-        # --with-system-ffi \
-        # --with-system-expat \
         --without-ensurepip \
         LDFLAGS="-Wl,-rpath=/usr/local/lib" \
     ; \
@@ -102,8 +108,8 @@ RUN set -eux; \
     # 立即配置动态链接库
     echo "/usr/local/lib" > /etc/ld.so.conf.d/python3.13.conf; \
     ldconfig; \
-    # 验证Python可以运行
-    /usr/local/bin/python3.13 --version || echo "First run may fail, will fix in next step" ; \
+🔴【修改】# 去掉 || echo 容错，编译出来不能运行直接终止构建
+    /usr/local/bin/python3.13 --version; \
     # 清理编译中间文件
     find /usr/local -type f -executable -not \( -name '*tkinter*' \) -exec strip '{}' + || true; \
     find /usr/local -type f \( -name '*.a' -o -name '*.pyc' -o -name '*.pyo' \) -delete; \
@@ -185,13 +191,6 @@ RUN set -eux; \
     # 更新动态库缓存
     echo "/usr/local/lib" > /etc/ld.so.conf.d/python3.13.conf; \
     ldconfig; \
-    # 清理Python测试文件和文档
-    # find /usr/local -depth \
-    #     \( \
-    #         \( -type d -a \( -name test -o -name tests -o -name idle_test \) \) \
-    #         -o \( -type f -a \( -name '*.pyc' -o -name '*.pyo' \) \) \
-    #         -o \( -type f -a -name '*.a' -not -name 'libpython*.a' \) \
-    #     \) -delete; \
     find /usr/local -depth '(' \
       '(' -type d -a '(' -name test -o -name tests -o -name idle_test ')' ')' \
       -o \
